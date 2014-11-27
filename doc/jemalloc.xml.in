@@ -1771,6 +1771,22 @@ malloc_conf = "xmalloc:true";]]></programlisting>
         does not include inactive chunks.</para></listitem>
       </varlistentry>
 
+      <varlistentry id="stats.bookkeeping">
+        <term>
+          <mallctl>stats.bookkeeping</mallctl>
+          (<type>size_t</type>)
+          <literal>r-</literal>
+          [<option>--enable-stats</option>]
+        </term>
+        <listitem><para>Total number of bytes in active pages allocated for
+        data structures that are internal to jemalloc.  Note that since some of
+        these allocations are made through arenas, this stat has some overlap
+		with <link linkend="stats.allocated">
+        <mallctl>stats.allocated</mallctl></link> as well as stats for
+        individual arenas.
+        </para></listitem>
+      </varlistentry>
+
       <varlistentry id="stats.chunks.current">
         <term>
           <mallctl>stats.chunks.current</mallctl>

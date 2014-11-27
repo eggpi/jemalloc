@@ -403,6 +403,9 @@ extern size_t const	index2size_tab[NSIZES];
  */
 extern uint8_t const	size2index_tab[];
 
+extern malloc_mutex_t bookkeeping_mtx;
+extern size_t bookkeeping;
+
 arena_t	*a0get(void);
 void	*a0malloc(size_t size);
 void	*a0calloc(size_t num, size_t size);
@@ -826,6 +829,19 @@ imalloc(tsd_t *tsd, size_t size)
 }
 
 JEMALLOC_ALWAYS_INLINE void *
+imalloc_bookkeeping(tsd_t *tsd, size_t size)
+{
+	void *ret = imalloc(tsd, size);
+	if (config_stats) {
+		malloc_mutex_lock(&bookkeeping_mtx);
+		bookkeeping += s2u(size);
+		malloc_mutex_unlock(&bookkeeping_mtx);
+	}
+	return ret;
+}
+
+
+JEMALLOC_ALWAYS_INLINE void *
 icalloct(tsd_t *tsd, size_t size, bool try_tcache, arena_t *arena)
 {
 
@@ -872,10 +888,30 @@ ipalloct(tsd_t *tsd, size_t usize, size_t alignment, bool zero, bool try_tcache,
 }
 
 JEMALLOC_ALWAYS_INLINE void *
+ipalloct_bookkeeping(tsd_t *tsd, size_t usize, size_t alignment, bool zero,
+    bool try_tcache, arena_t *arena)
+{
+	void *ret = ipalloct(tsd, usize, alignment, zero, try_tcache, arena);
+	if (config_stats) {
+		malloc_mutex_lock(&bookkeeping_mtx);
+		bookkeeping += sa2u(usize, alignment);
+		malloc_mutex_unlock(&bookkeeping_mtx);
+	}
+	return ret;
+}
+
+JEMALLOC_ALWAYS_INLINE void *
 ipalloc(tsd_t *tsd, size_t usize, size_t alignment, bool zero)
 {
 
 	return (ipalloct(tsd, usize, alignment, zero, true, NULL));
+}
+
+JEMALLOC_ALWAYS_INLINE void *
+ipalloc_bookkeeping(tsd_t *tsd, size_t usize, size_t alignment, bool zero)
+{
+
+	return (ipalloct_bookkeeping(tsd, usize, alignment, zero, true, NULL));
 }
 
 /*
@@ -950,6 +986,18 @@ idalloct(tsd_t *tsd, void *ptr, bool try_tcache)
 }
 
 JEMALLOC_ALWAYS_INLINE void
+idalloct_bookkeeping(tsd_t *tsd, void *ptr, bool try_tcache)
+{
+	if (config_stats) {
+		malloc_mutex_lock(&bookkeeping_mtx);
+		bookkeeping -= isalloc(ptr, false);
+		malloc_mutex_unlock(&bookkeeping_mtx);
+	}
+
+	idalloct(tsd, ptr, try_tcache);
+}
+
+JEMALLOC_ALWAYS_INLINE void
 isdalloct(tsd_t *tsd, void *ptr, size_t size, bool try_tcache)
 {
 	arena_chunk_t *chunk;
@@ -968,6 +1016,13 @@ idalloc(tsd_t *tsd, void *ptr)
 {
 
 	idalloct(tsd, ptr, true);
+}
+
+JEMALLOC_ALWAYS_INLINE void
+idalloc_bookkeeping(tsd_t *tsd, void *ptr)
+{
+
+	idalloct_bookkeeping(tsd, ptr, true);
 }
 
 JEMALLOC_ALWAYS_INLINE void

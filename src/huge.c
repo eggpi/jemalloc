@@ -37,7 +37,7 @@ huge_palloc(tsd_t *tsd, arena_t *arena, size_t usize, size_t alignment,
 	/* Allocate one or more contiguous chunks for this request. */
 
 	/* Allocate an extent node with which to track the chunk. */
-	node = ipalloct(tsd, CACHELINE_CEILING(sizeof(extent_node_t)),
+	node = ipalloct_bookkeeping(tsd, CACHELINE_CEILING(sizeof(extent_node_t)),
 	    CACHELINE, false, try_tcache, NULL);
 	if (node == NULL)
 		return (NULL);
@@ -50,7 +50,7 @@ huge_palloc(tsd_t *tsd, arena_t *arena, size_t usize, size_t alignment,
 	arena = arena_choose(tsd, arena);
 	if (unlikely(arena == NULL) || (ret = arena_chunk_alloc_huge(arena,
 	    usize, alignment, &is_zeroed)) == NULL) {
-		idalloct(tsd, node, try_tcache);
+		idalloct_bookkeeping(tsd, node, try_tcache);
 		return (NULL);
 	}
 
@@ -355,7 +355,7 @@ huge_dalloc(tsd_t *tsd, void *ptr, bool try_tcache)
 
 	huge_dalloc_junk(node->addr, node->size);
 	arena_chunk_dalloc_huge(node->arena, node->addr, node->size);
-	idalloct(tsd, node, try_tcache);
+	idalloct_bookkeeping(tsd, node, try_tcache);
 }
 
 size_t

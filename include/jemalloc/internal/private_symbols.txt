@@ -91,8 +91,10 @@ atomic_sub_uint32
 atomic_sub_uint64
 atomic_sub_z
 base_alloc
+base_allocated
 base_boot
 base_calloc
+base_mtx
 base_node_alloc
 base_node_dalloc
 base_postfork_child
@@ -107,6 +109,8 @@ bitmap_set
 bitmap_sfu
 bitmap_size
 bitmap_unset
+bookkeeping
+bookkeeping_mtx
 bt_init
 buferror
 chunk_alloc_arena
@@ -220,8 +224,11 @@ huge_salloc
 icalloc
 icalloct
 idalloc
+idalloc_bookkeeping
 idalloct
+idalloct_bookkeeping
 imalloc
+imalloc_bookkeeping
 imalloct
 in_valgrind
 index2size
@@ -229,7 +236,9 @@ index2size_compute
 index2size_lookup
 index2size_tab
 ipalloc
+ipalloc_bookkeeping
 ipalloct
+ipalloct_bookkeeping
 iqalloc
 iralloc
 iralloct

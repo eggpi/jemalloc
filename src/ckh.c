@@ -270,7 +270,7 @@ ckh_grow(tsd_t *tsd, ckh_t *ckh)
 			ret = true;
 			goto label_return;
 		}
-		tab = (ckhc_t *)ipalloc(tsd, usize, CACHELINE, true);
+		tab = (ckhc_t *)ipalloc_bookkeeping(tsd, usize, CACHELINE, true);
 		if (tab == NULL) {
 			ret = true;
 			goto label_return;
@@ -282,12 +282,12 @@ ckh_grow(tsd_t *tsd, ckh_t *ckh)
 		ckh->lg_curbuckets = lg_curcells - LG_CKH_BUCKET_CELLS;
 
 		if (!ckh_rebuild(ckh, tab)) {
-			idalloc(tsd, tab);
+			idalloc_bookkeeping(tsd, tab);
 			break;
 		}
 
 		/* Rebuilding failed, so back out partially rebuilt table. */
-		idalloc(tsd, ckh->tab);
+		idalloc_bookkeeping(tsd, ckh->tab);
 		ckh->tab = tab;
 		ckh->lg_curbuckets = lg_prevbuckets;
 	}
@@ -313,7 +313,7 @@ ckh_shrink(tsd_t *tsd, ckh_t *ckh)
 	usize = sa2u(sizeof(ckhc_t) << lg_curcells, CACHELINE);
 	if (usize == 0)
 		return;
-	tab = (ckhc_t *)ipalloc(tsd, usize, CACHELINE, true);
+	tab = (ckhc_t *)ipalloc_bookkeeping(tsd, usize, CACHELINE, true);
 	if (tab == NULL) {
 		/*
 		 * An OOM error isn't worth propagating, since it doesn't
@@ -328,7 +328,7 @@ ckh_shrink(tsd_t *tsd, ckh_t *ckh)
 	ckh->lg_curbuckets = lg_curcells - LG_CKH_BUCKET_CELLS;
 
 	if (!ckh_rebuild(ckh, tab)) {
-		idalloc(tsd, tab);
+		idalloc_bookkeeping(tsd, tab);
 #ifdef CKH_COUNT
 		ckh->nshrinks++;
 #endif
@@ -336,7 +336,7 @@ ckh_shrink(tsd_t *tsd, ckh_t *ckh)
 	}
 
 	/* Rebuilding failed, so back out partially rebuilt table. */
-	idalloc(tsd, ckh->tab);
+	idalloc_bookkeeping(tsd, ckh->tab);
 	ckh->tab = tab;
 	ckh->lg_curbuckets = lg_prevbuckets;
 #ifdef CKH_COUNT
@@ -389,7 +389,7 @@ ckh_new(tsd_t *tsd, ckh_t *ckh, size_t minitems, ckh_hash_t *hash,
 		ret = true;
 		goto label_return;
 	}
-	ckh->tab = (ckhc_t *)ipalloc(tsd, usize, CACHELINE, true);
+	ckh->tab = (ckhc_t *)ipalloc_bookkeeping(tsd, usize, CACHELINE, true);
 	if (ckh->tab == NULL) {
 		ret = true;
 		goto label_return;
@@ -418,7 +418,7 @@ ckh_delete(tsd_t *tsd, ckh_t *ckh)
 	    (unsigned long long)ckh->nrelocs);
 #endif
 
-	idalloc(tsd, ckh->tab);
+	idalloc_bookkeeping(tsd, ckh->tab);
 	if (config_debug)
 		memset(ckh, 0x5a, sizeof(ckh_t));
 }

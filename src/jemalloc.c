@@ -45,6 +45,13 @@ size_t	opt_narenas = 0;
 /* Initialized to true if the process is running inside Valgrind. */
 bool	in_valgrind;
 
+/* Total memory allocated via ipalloc/imalloc for bookkeeping purposes that
+ * needs to be accounted for in stats.bookkeeping but deducted from
+ * stats.allocated.
+ */
+malloc_mutex_t bookkeeping_mtx;
+size_t bookkeeping;
+
 unsigned	ncpus;
 
 /* Protects arenas initialization (arenas, narenas_total). */
@@ -284,6 +291,14 @@ a0alloc(size_t size, bool zero)
 	else
 		ret = huge_malloc(NULL, a0get(), size, zero, false);
 
+	if (config_stats) {
+		// FIXME: apparently applications could call a0{m,c}alloc on FreeBSD,
+		// so not all calls to this function are due to bookkeeping.
+		malloc_mutex_lock(&bookkeeping_mtx);
+		bookkeeping += s2u(size);
+		malloc_mutex_unlock(&bookkeeping_mtx);
+	}
+
 	return (ret);
 }
 
@@ -308,6 +323,12 @@ a0free(void *ptr)
 
 	if (ptr == NULL)
 		return;
+
+	if (config_stats) {
+		malloc_mutex_lock(&bookkeeping_mtx);
+		bookkeeping -= isalloc(ptr, false);
+		malloc_mutex_unlock(&bookkeeping_mtx);
+	}
 
 	chunk = (arena_chunk_t *)CHUNK_ADDR2BASE(ptr);
 	if (likely(chunk != ptr))
@@ -1170,6 +1191,11 @@ malloc_init_hard(void)
 	}
 
 	if (malloc_mutex_init(&arenas_lock)) {
+		malloc_mutex_unlock(&init_lock);
+		return (true);
+	}
+
+	if (malloc_mutex_init(&bookkeeping_mtx)) {
 		malloc_mutex_unlock(&init_lock);
 		return (true);
 	}
