@@ -50,7 +50,7 @@ huge_palloc(tsd_t *tsd, arena_t *arena, size_t size, size_t alignment,
 	is_zeroed = zero;
 	arena = arena_choose(tsd, arena);
 	if (unlikely(arena == NULL) || (ret = arena_chunk_alloc_huge(arena,
-	    usize, alignment, &is_zeroed)) == NULL) {
+	    usize, psize, alignment, &is_zeroed)) == NULL) {
 		idalloct(tsd, node, try_tcache);
 		return (NULL);
 	}
@@ -58,6 +58,7 @@ huge_palloc(tsd_t *tsd, arena_t *arena, size_t size, size_t alignment,
 	/* Insert node into huge. */
 	node->addr = ret;
 	node->size = usize;
+	node->psize = psize;
 	node->zeroed = is_zeroed;
 	node->arena = arena;
 
@@ -98,28 +99,37 @@ huge_dalloc_junk_t *huge_dalloc_junk = JEMALLOC_N(huge_dalloc_junk_impl);
 #endif
 
 static void
-huge_ralloc_no_move_similar(void *ptr, size_t oldsize, size_t usize,
+huge_ralloc_no_move_similar(void *ptr, size_t oldusize, size_t usize,
     size_t size, size_t extra, bool zero)
 {
-	size_t usize_next;
+	size_t usize_next, oldpsize, psize = PAGE_CEILING(size);
 	bool zeroed;
 	extent_node_t *node, key;
 	arena_t *arena;
 
 	/* Increase usize to incorporate extra. */
-	while (usize < s2u(size+extra) && (usize_next = s2u(usize+1)) < oldsize)
+	while (usize < s2u(size+extra) && (usize_next = s2u(usize+1)) < oldusize)
 		usize = usize_next;
 
-	if (oldsize == usize)
+	malloc_mutex_lock(&huge_mtx);
+	key.addr = ptr;
+	node = extent_tree_ad_search(&huge, &key);
+	assert(node != NULL);
+	assert(node->addr == ptr);
+	oldpsize = node->psize;
+	node->psize = psize;
+	malloc_mutex_unlock(&huge_mtx);
+
+	if (oldusize == usize)
 		return;
 
 	/* Fill if necessary (shrinking). */
-	if (oldsize > usize) {
+	if (oldusize > usize) {
 		size_t sdiff = CHUNK_CEILING(usize) - usize;
 		zeroed = (sdiff != 0) ? !pages_purge((void *)((uintptr_t)ptr +
 		    usize), sdiff) : true;
 		if (config_fill && unlikely(opt_junk_free)) {
-			memset((void *)((uintptr_t)ptr + usize), 0x5a, oldsize -
+			memset((void *)((uintptr_t)ptr + usize), 0x5a, oldusize -
 			    usize);
 			zeroed = false;
 		}
@@ -127,10 +137,6 @@ huge_ralloc_no_move_similar(void *ptr, size_t oldsize, size_t usize,
 		zeroed = true;
 
 	malloc_mutex_lock(&huge_mtx);
-	key.addr = ptr;
-	node = extent_tree_ad_search(&huge, &key);
-	assert(node != NULL);
-	assert(node->addr == ptr);
 	arena = node->arena;
 	/* Update the size of the huge allocation. */
 	assert(node->size != usize);
@@ -139,26 +145,26 @@ huge_ralloc_no_move_similar(void *ptr, size_t oldsize, size_t usize,
 	node->zeroed = (node->zeroed && zeroed);
 	malloc_mutex_unlock(&huge_mtx);
 
-	arena_chunk_ralloc_huge_similar(arena, ptr, oldsize, usize);
+	arena_chunk_ralloc_huge_similar(arena, ptr, oldusize, oldpsize, usize, psize);
 
 	/* Fill if necessary (growing). */
-	if (oldsize < usize) {
+	if (oldusize < usize) {
 		if (zero || (config_fill && unlikely(opt_zero))) {
 			if (!zeroed) {
-				memset((void *)((uintptr_t)ptr + oldsize), 0,
-				    usize - oldsize);
+				memset((void *)((uintptr_t)ptr + oldusize), 0,
+				    usize - oldusize);
 			}
 		} else if (config_fill && unlikely(opt_junk_alloc)) {
-			memset((void *)((uintptr_t)ptr + oldsize), 0xa5, usize -
-			    oldsize);
+			memset((void *)((uintptr_t)ptr + oldusize), 0xa5, usize -
+			    oldusize);
 		}
 	}
 }
 
 static void
-huge_ralloc_no_move_shrink(void *ptr, size_t oldsize, size_t usize)
+huge_ralloc_no_move_shrink(void *ptr, size_t oldusize, size_t usize, size_t size)
 {
-	size_t sdiff;
+	size_t sdiff, oldpsize, psize = PAGE_CEILING(size);
 	bool zeroed;
 	extent_node_t *node, key;
 	arena_t *arena;
@@ -167,7 +173,7 @@ huge_ralloc_no_move_shrink(void *ptr, size_t oldsize, size_t usize)
 	zeroed = (sdiff != 0) ? !pages_purge((void *)((uintptr_t)ptr + usize),
 	    sdiff) : true;
 	if (config_fill && unlikely(opt_junk_free)) {
-		huge_dalloc_junk((void *)((uintptr_t)ptr + usize), oldsize -
+		huge_dalloc_junk((void *)((uintptr_t)ptr + usize), oldusize -
 		    usize);
 		zeroed = false;
 	}
@@ -180,17 +186,19 @@ huge_ralloc_no_move_shrink(void *ptr, size_t oldsize, size_t usize)
 	arena = node->arena;
 	/* Update the size of the huge allocation. */
 	node->size = usize;
+	oldpsize = node->psize;
+	node->psize = psize;
 	/* Clear node->zeroed if zeroing failed above. */
 	node->zeroed = (node->zeroed && zeroed);
 	malloc_mutex_unlock(&huge_mtx);
 
 	/* Zap the excess chunks. */
-	arena_chunk_ralloc_huge_shrink(arena, ptr, oldsize, usize);
+	arena_chunk_ralloc_huge_shrink(arena, ptr, oldusize, oldpsize, usize, psize);
 }
 
 static bool
-huge_ralloc_no_move_expand(void *ptr, size_t oldsize, size_t size, bool zero) {
-	size_t usize;
+huge_ralloc_no_move_expand(void *ptr, size_t oldusize, size_t size, bool zero) {
+	size_t usize, psize;
 	extent_node_t *node, key;
 	arena_t *arena;
 	bool is_zeroed_subchunk, is_zeroed_chunk;
@@ -200,6 +208,8 @@ huge_ralloc_no_move_expand(void *ptr, size_t oldsize, size_t size, bool zero) {
 		/* size_t overflow. */
 		return (true);
 	}
+
+	psize = PAGE_CEILING(size);
 
 	malloc_mutex_lock(&huge_mtx);
 	key.addr = ptr;
@@ -216,28 +226,29 @@ huge_ralloc_no_move_expand(void *ptr, size_t oldsize, size_t size, bool zero) {
 	 */
 	is_zeroed_chunk = zero;
 
-	if (arena_chunk_ralloc_huge_expand(arena, ptr, oldsize, usize,
-	     &is_zeroed_chunk))
+	if (arena_chunk_ralloc_huge_expand(arena, ptr, oldusize, node->psize, usize,
+		psize, &is_zeroed_chunk))
 		return (true);
 
 	malloc_mutex_lock(&huge_mtx);
 	/* Update the size of the huge allocation. */
 	node->size = usize;
+	node->psize = psize;
 	malloc_mutex_unlock(&huge_mtx);
 
 	if (zero || (config_fill && unlikely(opt_zero))) {
 		if (!is_zeroed_subchunk) {
-			memset((void *)((uintptr_t)ptr + oldsize), 0,
-			    CHUNK_CEILING(oldsize) - oldsize);
+			memset((void *)((uintptr_t)ptr + oldusize), 0,
+			    CHUNK_CEILING(oldusize) - oldusize);
 		}
 		if (!is_zeroed_chunk) {
 			memset((void *)((uintptr_t)ptr +
-			    CHUNK_CEILING(oldsize)), 0, usize -
-			    CHUNK_CEILING(oldsize));
+			    CHUNK_CEILING(oldusize)), 0, usize -
+			    CHUNK_CEILING(oldusize));
 		}
 	} else if (config_fill && unlikely(opt_junk_alloc)) {
-		memset((void *)((uintptr_t)ptr + oldsize), 0xa5, usize -
-		    oldsize);
+		memset((void *)((uintptr_t)ptr + oldusize), 0xa5, usize -
+		    oldusize);
 	}
 
 	return (false);
@@ -273,7 +284,7 @@ huge_ralloc_no_move(void *ptr, size_t oldsize, size_t size, size_t extra,
 
 	/* Shrink the allocation in-place. */
 	if (CHUNK_CEILING(oldsize) >= CHUNK_CEILING(usize)) {
-		huge_ralloc_no_move_shrink(ptr, oldsize, usize);
+		huge_ralloc_no_move_shrink(ptr, oldsize, usize, size);
 		return (false);
 	}
 
@@ -355,7 +366,7 @@ huge_dalloc(tsd_t *tsd, void *ptr, bool try_tcache)
 	malloc_mutex_unlock(&huge_mtx);
 
 	huge_dalloc_junk(node->addr, node->size);
-	arena_chunk_dalloc_huge(node->arena, node->addr, node->size);
+	arena_chunk_dalloc_huge(node->arena, node->addr, node->size, node->psize);
 	idalloct(tsd, node, try_tcache);
 }
 

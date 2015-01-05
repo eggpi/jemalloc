@@ -24,6 +24,10 @@ struct extent_node_s {
 	/* Total region size. */
 	size_t			size;
 
+	/* Size as requested by the application, rounded to a page boundary. Only
+	 * valid for huge allocations, not base allocations. */
+	size_t			psize;
+
 	/* Arena from which this extent came, if any. */
 	arena_t			*arena;
 
