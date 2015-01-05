@@ -371,7 +371,7 @@ huge_dalloc(tsd_t *tsd, void *ptr, bool try_tcache)
 }
 
 size_t
-huge_salloc(const void *ptr)
+huge_salloc(const void *ptr, bool round_to_pages)
 {
 	size_t ret;
 	extent_node_t *node, key;
@@ -383,7 +383,7 @@ huge_salloc(const void *ptr)
 	node = extent_tree_ad_search(&huge, &key);
 	assert(node != NULL);
 
-	ret = node->size;
+	ret = round_to_pages ? node->psize : node->size;
 
 	malloc_mutex_unlock(&huge_mtx);
 

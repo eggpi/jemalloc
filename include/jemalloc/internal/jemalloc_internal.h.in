@@ -785,7 +785,9 @@ void	*ipalloct(tsd_t *tsd, size_t size, size_t alignment, bool zero,
     bool try_tcache, arena_t *arena);
 void	*ipalloc(tsd_t *tsd, size_t size, size_t alignment, bool zero);
 size_t	isalloc(const void *ptr, bool demote);
+size_t	isalloc_huge_pages(const void *ptr);
 size_t	ivsalloc(const void *ptr, bool demote);
+size_t	ivsalloc_huge_pages(const void *ptr);
 size_t	u2rz(size_t usize);
 size_t	p2rz(const void *ptr);
 void	idalloct(tsd_t *tsd, void *ptr, bool try_tcache);
@@ -898,7 +900,25 @@ isalloc(const void *ptr, bool demote)
 	if (likely(chunk != ptr))
 		ret = arena_salloc(ptr, demote);
 	else
-		ret = huge_salloc(ptr);
+		ret = huge_salloc(ptr, false);
+
+	return (ret);
+}
+
+/* Like isalloc, but returns psize for huge allocations. */
+JEMALLOC_ALWAYS_INLINE size_t
+isalloc_huge_pages(const void *ptr)
+{
+	size_t ret;
+	arena_chunk_t *chunk;
+
+	assert(ptr != NULL);
+
+	chunk = (arena_chunk_t *)CHUNK_ADDR2BASE(ptr);
+	if (likely(chunk != ptr))
+		ret = arena_salloc(ptr, false);
+	else
+		ret = huge_salloc(ptr, true);
 
 	return (ret);
 }
@@ -912,6 +932,18 @@ ivsalloc(const void *ptr, bool demote)
 		return (0);
 
 	return (isalloc(ptr, demote));
+}
+
+/* Like ivsalloc, but returns psize for huge allocations. */
+JEMALLOC_ALWAYS_INLINE size_t
+ivsalloc_huge_pages(const void *ptr, bool demote)
+{
+
+	/* Return 0 if ptr is not within a chunk managed by jemalloc. */
+	if (rtree_get(chunks_rtree, (uintptr_t)CHUNK_ADDR2BASE(ptr)) == 0)
+		return (0);
+
+	return (isalloc_huge_pages(ptr));
 }
 
 JEMALLOC_INLINE size_t

@@ -2380,9 +2380,9 @@ je_malloc_usable_size(JEMALLOC_USABLE_SIZE_CONST void *ptr)
 	malloc_thread_init();
 
 	if (config_ivsalloc)
-		ret = ivsalloc(ptr, config_prof);
+		ret = ivsalloc_huge_pages(ptr, config_prof);
 	else
-		ret = (ptr != NULL) ? isalloc(ptr, config_prof) : 0;
+		ret = (ptr != NULL) ? isalloc_huge_pages(ptr) : 0;
 
 	return (ret);
 }
