@@ -21,6 +21,7 @@
 #  define MALLOCX_ZERO	((int)0x40)
 /* Bias arena index bits so that 0 encodes "MALLOCX_ARENA() unspecified". */
 #  define MALLOCX_ARENA(a)	((int)(((a)+1) << 8))
+#  define MALLOCX_ROUND_HUGE_TO_PAGES	((int)0x80)
 
 #ifdef JEMALLOC_HAVE_ATTR
 #  define JEMALLOC_ATTR(s) __attribute__((s))

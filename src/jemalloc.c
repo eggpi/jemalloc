@@ -2278,6 +2278,9 @@ inallocx(size_t size, int flags)
 {
 	size_t usize;
 
+	if (unlikely(size > arena_maxclass && (flags & MALLOCX_ROUND_HUGE_TO_PAGES)))
+		return PAGE_CEILING(size);
+
 	if (likely((flags & MALLOCX_LG_ALIGN_MASK) == 0))
 		usize = s2u(size);
 	else
