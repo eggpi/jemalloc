@@ -1849,17 +1849,17 @@ imallocx_flags_decode(tsd_t *tsd, size_t size, int flags, size_t *usize,
 }
 
 JEMALLOC_ALWAYS_INLINE_C void *
-imallocx_flags(tsd_t *tsd, size_t usize, size_t alignment, bool zero,
+imallocx_flags(tsd_t *tsd, size_t size, size_t alignment, bool zero,
     bool try_tcache, arena_t *arena)
 {
 
 	if (alignment != 0) {
-		return (ipalloct(tsd, usize, alignment, zero, try_tcache,
+		return (ipalloct(tsd, size, alignment, zero, try_tcache,
 		    arena));
 	}
 	if (zero)
-		return (icalloct(tsd, usize, try_tcache, arena));
-	return (imalloct(tsd, usize, try_tcache, arena));
+		return (icalloct(tsd, size, try_tcache, arena));
+	return (imalloct(tsd, size, try_tcache, arena));
 }
 
 JEMALLOC_ALWAYS_INLINE_C void *
@@ -1941,7 +1941,7 @@ imallocx_no_prof(tsd_t *tsd, size_t size, int flags, size_t *usize)
 	if (unlikely(imallocx_flags_decode_hard(tsd, size, flags, usize,
 	    &alignment, &zero, &try_tcache, &arena)))
 		return (NULL);
-	return (imallocx_flags(tsd, *usize, alignment, zero, try_tcache,
+	return (imallocx_flags(tsd, size, alignment, zero, try_tcache,
 	    arena));
 }
 
