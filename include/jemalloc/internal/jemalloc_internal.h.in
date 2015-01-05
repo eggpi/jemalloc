@@ -781,9 +781,9 @@ void	*imalloct(tsd_t *tsd, size_t size, bool try_tcache, arena_t *arena);
 void	*imalloc(tsd_t *tsd, size_t size);
 void	*icalloct(tsd_t *tsd, size_t size, bool try_tcache, arena_t *arena);
 void	*icalloc(tsd_t *tsd, size_t size);
-void	*ipalloct(tsd_t *tsd, size_t usize, size_t alignment, bool zero,
+void	*ipalloct(tsd_t *tsd, size_t size, size_t alignment, bool zero,
     bool try_tcache, arena_t *arena);
-void	*ipalloc(tsd_t *tsd, size_t usize, size_t alignment, bool zero);
+void	*ipalloc(tsd_t *tsd, size_t size, size_t alignment, bool zero);
 size_t	isalloc(const void *ptr, bool demote);
 size_t	ivsalloc(const void *ptr, bool demote);
 size_t	u2rz(size_t usize);
@@ -843,13 +843,14 @@ icalloc(tsd_t *tsd, size_t size)
 }
 
 JEMALLOC_ALWAYS_INLINE void *
-ipalloct(tsd_t *tsd, size_t usize, size_t alignment, bool zero, bool try_tcache,
+ipalloct(tsd_t *tsd, size_t size, size_t alignment, bool zero, bool try_tcache,
     arena_t *arena)
 {
 	void *ret;
+	size_t usize;
 
 	assert(usize != 0);
-	assert(usize == sa2u(usize, alignment));
+	usize = sa2u(size, alignment);
 
 	if (usize <= SMALL_MAXCLASS && alignment < PAGE)
 		ret = arena_malloc(tsd, arena, usize, zero, try_tcache);
@@ -872,10 +873,10 @@ ipalloct(tsd_t *tsd, size_t usize, size_t alignment, bool zero, bool try_tcache,
 }
 
 JEMALLOC_ALWAYS_INLINE void *
-ipalloc(tsd_t *tsd, size_t usize, size_t alignment, bool zero)
+ipalloc(tsd_t *tsd, size_t size, size_t alignment, bool zero)
 {
 
-	return (ipalloct(tsd, usize, alignment, zero, true, NULL));
+	return (ipalloct(tsd, size, alignment, zero, true, NULL));
 }
 
 /*
