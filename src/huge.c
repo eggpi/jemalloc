@@ -15,24 +15,25 @@ static extent_tree_t	huge;
 void *
 huge_malloc(tsd_t *tsd, arena_t *arena, size_t size, bool zero, bool try_tcache)
 {
-	size_t usize;
-
-	usize = s2u(size);
-	if (usize == 0) {
-		/* size_t overflow. */
-		return (NULL);
-	}
-
-	return (huge_palloc(tsd, arena, usize, chunksize, zero, try_tcache));
+	return (huge_palloc(tsd, arena, size, chunksize, zero, try_tcache));
 }
 
 void *
-huge_palloc(tsd_t *tsd, arena_t *arena, size_t usize, size_t alignment,
+huge_palloc(tsd_t *tsd, arena_t *arena, size_t size, size_t alignment,
     bool zero, bool try_tcache)
 {
 	void *ret;
 	extent_node_t *node;
 	bool is_zeroed;
+	size_t usize, psize;
+
+	usize = (alignment != 0) ? sa2u(size, alignment) : s2u(size);
+	if (usize == 0) {
+		/* size_t overflow. */
+		return (NULL);
+	}
+
+	psize = PAGE_CEILING(size);
 
 	/* Allocate one or more contiguous chunks for this request. */
 

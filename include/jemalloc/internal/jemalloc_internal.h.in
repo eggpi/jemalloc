@@ -861,9 +861,9 @@ ipalloct(tsd_t *tsd, size_t size, size_t alignment, bool zero, bool try_tcache,
 				return (NULL);
 			ret = arena_palloc(arena, usize, alignment, zero);
 		} else if (likely(alignment <= chunksize))
-			ret = huge_malloc(tsd, arena, usize, zero, try_tcache);
+			ret = huge_malloc(tsd, arena, size, zero, try_tcache);
 		else {
-			ret = huge_palloc(tsd, arena, usize, alignment, zero,
+			ret = huge_palloc(tsd, arena, size, alignment, zero,
 			    try_tcache);
 		}
 	}
